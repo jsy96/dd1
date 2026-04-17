@@ -89,6 +89,28 @@ async function createRealKV(): Promise<KVClient> {
   };
 }
 
+// Redis Cloud 客户端（使用 ioredis）
+async function createRedisCloudKV(): Promise<KVClient> {
+  const Redis = require('ioredis');
+  const redis = new Redis(process.env.REDIS_URL);
+
+  return {
+    get: async (key: string) => {
+      const value = await redis.get(key);
+      return value ? JSON.parse(value) : null;
+    },
+    set: async (key: string, value: any) => {
+      await redis.set(key, JSON.stringify(value));
+    },
+    del: async (key: string) => {
+      await redis.del(key);
+    },
+    ping: async () => {
+      return await redis.ping();
+    }
+  };
+}
+
 // 创建 KV 客户端实例
 let kvInstance: KVClient | null = null;
 
@@ -97,21 +119,29 @@ export async function getKVClient(): Promise<KVClient> {
     return kvInstance;
   }
 
-  // 检查是否有真实配置（支持旧的 Vercel KV 和新的 Upstash Redis）
-  const hasRealConfig = (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) ||
-                       (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
-
-  if (!hasRealConfig) {
-    console.log('⚠️ 使用内存模拟 KV (无真实配置)');
-    kvInstance = new MemoryKV();
-  } else {
+  // 检查 Redis 配置（优先级：Redis Cloud > Upstash > Vercel KV）
+  if (process.env.REDIS_URL) {
+    console.log('🔗 使用 Redis Cloud');
+    kvInstance = await createRedisCloudKV();
+  } else if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    console.log('🔗 使用 Upstash Redis');
     try {
-      console.log('🔗 使用真实 Vercel KV');
       kvInstance = await createRealKV();
     } catch (error) {
-      console.error('❌ 无法初始化真实 KV，回退到内存模拟:', error);
+      console.error('❌ 无法初始化 Upstash KV，回退到内存模拟:', error);
       kvInstance = new MemoryKV();
     }
+  } else if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    console.log('🔗 使用 Vercel KV');
+    try {
+      kvInstance = await createRealKV();
+    } catch (error) {
+      console.error('❌ 无法初始化 Vercel KV，回退到内存模拟:', error);
+      kvInstance = new MemoryKV();
+    }
+  } else {
+    console.log('⚠️ 使用内存模拟 KV (无真实配置)');
+    kvInstance = new MemoryKV();
   }
 
   return kvInstance;
