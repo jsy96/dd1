@@ -2,6 +2,29 @@ import { kv } from '../lib/kv';
 import fs from 'fs/promises';
 import path from 'path';
 
+// 加载 .env.local 文件
+async function loadEnv() {
+  try {
+    const envPath = path.join(process.cwd(), '.env.local');
+    const envContent = await fs.readFile(envPath, 'utf-8');
+    const lines = envContent.split('\n');
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (trimmedLine && !trimmedLine.startsWith('#')) {
+        const [key, ...valueParts] = trimmedLine.split('=');
+        const value = valueParts.join('=').replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+        if (key && value) {
+          process.env[key] = value;
+        }
+      }
+    }
+    console.log('✅ 已加载 .env.local 文件');
+  } catch (error) {
+    console.log('⚠️  未找到 .env.local 文件');
+  }
+}
+
 interface HSCodeItem {
   id: number;
   hsCode: string;
@@ -11,6 +34,9 @@ interface HSCodeItem {
 
 async function initKV() {
   try {
+    // 加载环境变量
+    await loadEnv();
+
     console.log('开始初始化 Vercel KV 数据...');
 
     // 读取 HScode.txt 文件
