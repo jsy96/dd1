@@ -97,10 +97,9 @@ export async function getKVClient(): Promise<KVClient> {
     return kvInstance;
   }
 
-  // 检查是否有真实配置（非占位符）
-  const hasRealConfig = process.env.KV_REST_API_URL &&
-                       process.env.KV_REST_API_TOKEN &&
-                       !process.env.KV_REST_API_URL.includes('your-kv-endpoint');
+  // 检查是否有真实配置（支持旧的 Vercel KV 和新的 Upstash Redis）
+  const hasRealConfig = (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) ||
+                       (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 
   if (!hasRealConfig) {
     console.log('⚠️ 使用内存模拟 KV (无真实配置)');
