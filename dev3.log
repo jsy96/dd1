@@ -1,0 +1,31 @@
+
+> hs-code-app@0.1.0 dev
+> next dev -p 3000
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://169.254.192.125:3000
+- Environments: .env.local
+✓ Ready in 1170ms
+
+🔗 使用 Redis Cloud
+ GET /api/hscodes 200 in 1133ms (next.js: 301ms, application-code: 833ms)
+○ Compiling / ...
+ GET / 200 in 4.4s (next.js: 3.8s, application-code: 599ms)
+ GET /api/hscodes 200 in 196ms (next.js: 9ms, application-code: 187ms)
+ GET / 200 in 84ms (next.js: 8ms, application-code: 76ms)
+ GET /api/hscodes 200 in 166ms (next.js: 7ms, application-code: 160ms)
+ GET / 200 in 63ms (next.js: 6ms, application-code: 57ms)
+ GET /api/hscodes 200 in 1019ms (next.js: 4ms, application-code: 1016ms)
+ GET / 200 in 56ms (next.js: 4ms, application-code: 53ms)
+ GET /api/hscodes 200 in 3.5s (next.js: 6ms, application-code: 3.5s)
+Error: Turbopack build failed with 1 errors:
+./app
+Error: Next.js inferred your workspace root, but it may not be correct.
+    We couldn't find the Next.js package (next/package.json) from the project directory: D:\cc-picture\dd1\data\hs-code-app\app
+     To fix this, set turbopack.root in your Next.js config, or ensure the Next.js package is resolvable from this directory.
+    Note: For security and performance reasons, files outside of the project directory will not be compiled.
+    See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+
+    at ignore-listed frames
+[?25h

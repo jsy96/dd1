@@ -1,0 +1,12 @@
+
+> hs-code-app@0.1.0 dev
+> next dev -p 3000 -H 0.0.0.0
+
+▲ Next.js 16.2.4 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://0.0.0.0:3000
+- Environments: .env.local
+✓ Ready in 1039ms
+
+🔗 使用 Redis Cloud
+ GET /api/hscodes 200 in 4.8s (next.js: 201ms, application-code: 4.6s)
