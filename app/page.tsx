@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Upload } from 'lucide-react';
 
 interface HSCodeItem {
   id: number;
@@ -10,19 +10,25 @@ interface HSCodeItem {
   chineseNote: string;
 }
 
+type EditingItem = {
+  id: number;
+  hsCode: string;
+  englishName: string;
+  chineseNote: string;
+};
+
 export default function Home() {
   const [items, setItems] = useState<HSCodeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 表单状态
-  const [formData, setFormData] = useState({
-    hsCode: '',
-    englishName: '',
-    chineseNote: ''
-  });
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
+  // 原位编辑状态
+  const [editingItem, setEditingItem] = useState<EditingItem | null>(null);
+
+  // 批量添加状态
+  const [showBatchAdd, setShowBatchAdd] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [batchProcessing, setBatchProcessing] = useState(false);
 
   // 获取数据
   const fetchItems = async () => {
@@ -49,57 +55,138 @@ export default function Home() {
     fetchItems();
   }, []);
 
-  // 处理输入变化
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+  // 原位编辑：开始编辑某行
+  const startInlineEdit = (item: HSCodeItem) => {
+    setEditingItem({
+      id: item.id,
+      hsCode: item.hsCode,
+      englishName: item.englishName,
+      chineseNote: item.chineseNote
+    });
   };
 
-  // 提交表单（添加或更新）
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // 原位编辑：取消编辑
+  const cancelInlineEdit = () => {
+    setEditingItem(null);
+  };
 
-    if (!formData.hsCode.trim() || !formData.englishName.trim()) {
+  // 原位编辑：保存编辑
+  const saveInlineEdit = async () => {
+    if (!editingItem) return;
+    if (!editingItem.hsCode.trim() || !editingItem.englishName.trim()) {
       alert('HS编码和英文品名是必填项');
       return;
     }
 
     try {
-      if (editingId !== null) {
-        // 更新现有记录
-        const response = await fetch(`/api/hscodes/${editingId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
-        });
-        const result = await response.json();
+      const response = await fetch(`/api/hscodes/${editingItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hsCode: editingItem.hsCode,
+          englishName: editingItem.englishName,
+          chineseNote: editingItem.chineseNote
+        })
+      });
+      const result = await response.json();
 
-        if (result.success) {
-          await fetchItems();
-          resetForm();
-        } else {
-          alert(`更新失败: ${result.error}`);
-        }
+      if (result.success) {
+        await fetchItems();
+        setEditingItem(null);
       } else {
-        // 添加新记录
-        const response = await fetch('/api/hscodes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData)
-        });
-        const result = await response.json();
-
-        if (result.success) {
-          await fetchItems();
-          resetForm();
-        } else {
-          alert(`添加失败: ${result.error}`);
-        }
+        alert(`更新失败: ${result.error}`);
       }
     } catch (err) {
       console.error(err);
-      alert('操作失败，请检查网络连接');
+      alert('更新失败，请检查网络连接');
     }
+  };
+
+  // 批量添加：解析并提交
+  const handleBatchAdd = async () => {
+    if (!batchText.trim()) {
+      alert('请输入数据');
+      return;
+    }
+
+    setBatchProcessing(true);
+    const lines = batchText.trim().split('\n');
+    const itemsToAdd: { hsCode: string; englishName: string; chineseNote: string }[] = [];
+    const errors: string[] = [];
+
+    lines.forEach((line, index) => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return;
+
+      // 尝试用 tab 分隔，如果没有 tab 则用逗号分隔
+      let parts = trimmedLine.split('\t');
+      if (parts.length < 2) {
+        parts = trimmedLine.split(/,|，/); // 支持中英文逗号
+      }
+
+      if (parts.length < 2) {
+        errors.push(`第 ${index + 1} 行格式错误，至少需要两列（HS编码和英文品名）`);
+        return;
+      }
+
+      const hsCode = parts[0]?.trim() || '';
+      const englishName = parts[1]?.trim() || '';
+      const chineseNote = parts[2]?.trim() || '';
+
+      if (!hsCode || !englishName) {
+        errors.push(`第 ${index + 1} 行缺少必填项`);
+        return;
+      }
+
+      itemsToAdd.push({ hsCode, englishName, chineseNote });
+    });
+
+    if (errors.length > 0) {
+      alert(`解析错误：\n${errors.join('\n')}`);
+      setBatchProcessing(false);
+      return;
+    }
+
+    if (itemsToAdd.length === 0) {
+      alert('没有有效的数据可以添加');
+      setBatchProcessing(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/hscodes/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToAdd })
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        await fetchItems();
+        setBatchText('');
+        setShowBatchAdd(false);
+        alert(`成功添加 ${result.count || itemsToAdd.length} 条记录`);
+      } else {
+        alert(`添加失败: ${result.error}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('批量添加失败，请检查网络连接');
+    } finally {
+      setBatchProcessing(false);
+    }
+  };
+
+  // 打开批量添加弹窗
+  const openBatchAdd = () => {
+    setShowBatchAdd(true);
+    setBatchText('');
+  };
+
+  // 关闭批量添加弹窗
+  const closeBatchAdd = () => {
+    setShowBatchAdd(false);
+    setBatchText('');
   };
 
   // 删除记录
@@ -123,30 +210,6 @@ export default function Home() {
     }
   };
 
-  // 开始编辑
-  const startEdit = (item: HSCodeItem) => {
-    setEditingId(item.id);
-    setFormData({
-      hsCode: item.hsCode,
-      englishName: item.englishName,
-      chineseNote: item.chineseNote
-    });
-    setIsAdding(false);
-  };
-
-  // 重置表单
-  const resetForm = () => {
-    setFormData({ hsCode: '', englishName: '', chineseNote: '' });
-    setEditingId(null);
-    setIsAdding(false);
-  };
-
-  // 开始添加
-  const startAdd = () => {
-    resetForm();
-    setIsAdding(true);
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
@@ -157,77 +220,15 @@ export default function Home() {
 
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-semibold text-gray-800">
-              {isAdding ? '添加新记录' : editingId !== null ? '编辑记录' : 'HS 编码列表'}
-            </h2>
+            <h2 className="text-xl font-semibold text-gray-800">HS 编码列表</h2>
             <button
-              onClick={startAdd}
+              onClick={openBatchAdd}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              <Plus size={18} />
-              添加新记录
+              <Upload size={18} />
+              批量添加
             </button>
           </div>
-
-          {/* 表单 */}
-          {(isAdding || editingId !== null) && (
-            <form onSubmit={handleSubmit} className="mb-8 p-4 border border-gray-200 rounded-lg bg-gray-50">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">HS 编码 *</label>
-                  <input
-                    type="text"
-                    name="hsCode"
-                    value={formData.hsCode}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="例如: 39206200"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">英文品名 *</label>
-                  <input
-                    type="text"
-                    name="englishName"
-                    value={formData.englishName}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="例如: STRAPPING MATERIAL"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">中文备注</label>
-                  <input
-                    type="text"
-                    name="chineseNote"
-                    value={formData.chineseNote}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="例如: 打包带 / 捆扎材料"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
-                >
-                  <Save size={18} />
-                  {editingId !== null ? '更新记录' : '添加记录'}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
-                >
-                  <X size={18} />
-                  取消
-                </button>
-              </div>
-            </form>
-          )}
 
           {/* 数据表格 */}
           {loading ? (
@@ -262,32 +263,84 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {items.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{item.id}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.hsCode}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{item.englishName}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{item.chineseNote}</td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => startEdit(item)}
-                            className="flex items-center gap-1 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded-md transition-colors"
-                          >
-                            <Edit size={14} />
-                            编辑
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item.id)}
-                            className="flex items-center gap-1 bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded-md transition-colors"
-                          >
-                            <Trash2 size={14} />
-                            删除
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {items.map((item) => {
+                    const isEditing = editingItem?.id === item.id;
+                    return (
+                      <tr key={item.id} className={isEditing ? 'bg-blue-50' : 'hover:bg-gray-50'}>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{item.id}</td>
+                        {isEditing ? (
+                          <>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                value={editingItem.hsCode}
+                                onChange={(e) => setEditingItem(prev => prev ? { ...prev, hsCode: e.target.value } : null)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                value={editingItem.englishName}
+                                onChange={(e) => setEditingItem(prev => prev ? { ...prev, englishName: e.target.value } : null)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                value={editingItem.chineseNote}
+                                onChange={(e) => setEditingItem(prev => prev ? { ...prev, chineseNote: e.target.value } : null)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                              />
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={saveInlineEdit}
+                                  className="flex items-center gap-1 bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded-md transition-colors"
+                                >
+                                  <Save size={14} />
+                                  保存
+                                </button>
+                                <button
+                                  onClick={cancelInlineEdit}
+                                  className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded-md transition-colors"
+                                >
+                                  <X size={14} />
+                                  取消
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{item.hsCode}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">{item.englishName}</td>
+                            <td className="px-4 py-3 text-sm text-gray-700">{item.chineseNote}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => startInlineEdit(item)}
+                                  className="flex items-center gap-1 bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded-md transition-colors"
+                                >
+                                  <Edit size={14} />
+                                  编辑
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  className="flex items-center gap-1 bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded-md transition-colors"
+                                >
+                                  <Trash2 size={14} />
+                                  删除
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -296,8 +349,65 @@ export default function Home() {
 
         <footer className="mt-12 pt-8 border-t border-gray-200 text-center text-gray-500 text-sm">
           <p>数据来源: HScode.txt | 存储后端: Vercel KV | 当前记录数: {items.length}</p>
-          <p className="mt-2">使用说明: 点击"添加新记录"按钮添加数据，点击行中的"编辑"或"删除"按钮进行操作</p>
+          <p className="mt-2">使用说明: 点击"批量添加"按钮粘贴多行数据，点击行中的"编辑"按钮在原位修改记录</p>
         </footer>
+
+        {/* 批量添加模态框 */}
+        {showBatchAdd && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-xl font-semibold text-gray-800">批量添加 HS 编码</h3>
+                <p className="text-gray-600 text-sm mt-1">
+                  每行一条记录，使用 Tab 或逗号分隔三列：HS编码、英文品名、中文备注
+                </p>
+              </div>
+              <div className="p-6 flex-1 overflow-auto">
+                <textarea
+                  value={batchText}
+                  onChange={(e) => setBatchText(e.target.value)}
+                  className="w-full h-64 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                  placeholder="示例：&#10;39206200&#9;STRAPPING MATERIAL&#9;打包带&#10;39269090&#9;OTHER PLASTIC ARTICLES&#9;其他塑料制品&#10;&#10;或使用逗号分隔：&#10;39206200,STRAPPING MATERIAL,打包带&#10;39269090,OTHER PLASTIC ARTICLES,其他塑料制品"
+                />
+                <div className="mt-4 text-sm text-gray-500">
+                  <p>格式说明：</p>
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    <li>第一列：HS 编码（必填）</li>
+                    <li>第二列：英文品名（必填）</li>
+                    <li>第三列：中文备注（可选）</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-2">
+                <button
+                  onClick={closeBatchAdd}
+                  className="flex items-center gap-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+                  disabled={batchProcessing}
+                >
+                  <X size={18} />
+                  取消
+                </button>
+                <button
+                  onClick={handleBatchAdd}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors disabled:bg-gray-400"
+                  disabled={batchProcessing || !batchText.trim()}
+                >
+                  {batchProcessing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      处理中...
+                    </>
+                  ) : (
+                    <>
+                      <Upload size={18} />
+                      批量添加
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

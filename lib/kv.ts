@@ -84,7 +84,10 @@ async function createRealKV(): Promise<KVClient> {
   return {
     get: (key: string) => kv.get(key),
     set: (key: string, value: any) => kv.set(key, value),
-    del: (key: string) => kv.del(key),
+    del: (key: string) => {
+      kv.del(key);
+      return Promise.resolve();
+    },
     ping: () => kv.ping()
   };
 }

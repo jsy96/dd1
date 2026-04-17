@@ -12,7 +12,7 @@ export interface HSCodeItem {
 export async function GET(request: NextRequest) {
   try {
     // 从 KV 中获取数据
-    const items = await kv.get<HSCodeItem[]>('hscodes');
+    const items = (await kv.get('hscodes') as HSCodeItem[]);
 
     // 如果数据不存在，返回空数组
     const data = items || [];
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取现有数据
-    const items = await kv.get<HSCodeItem[]>('hscodes') || [];
+    const items = (await kv.get('hscodes') as HSCodeItem[]) || [];
 
     // 生成新 ID（现有最大 ID + 1）
     const maxId = items.length > 0 ? Math.max(...items.map(item => item.id)) : 0;

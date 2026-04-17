@@ -36,7 +36,7 @@ export async function PUT(
     }
 
     // 获取现有数据
-    const items = await kv.get<HSCodeItem[]>('hscodes') || [];
+    const items = (await kv.get('hscodes') as HSCodeItem[]) || [];
 
     // 查找要更新的项目
     const itemIndex = items.findIndex(item => item.id === itemId);
@@ -90,7 +90,7 @@ export async function DELETE(
     }
 
     // 获取现有数据
-    const items = await kv.get<HSCodeItem[]>('hscodes') || [];
+    const items = (await kv.get('hscodes') as HSCodeItem[]) || [];
 
     // 查找要删除的项目
     const itemIndex = items.findIndex(item => item.id === itemId);
