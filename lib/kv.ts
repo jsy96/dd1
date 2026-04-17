@@ -2,8 +2,8 @@
 
 interface KVClient {
   get: (key: string) => Promise<any>;
-  set: (key: string, value: any) => Promise<void>;
-  del: (key: string) => Promise<void>;
+  set: (key: string, value: any) => Promise<void | 'OK' | string>;
+  del: (key: string) => Promise<void | number>;
   ping: () => Promise<string>;
 }
 
