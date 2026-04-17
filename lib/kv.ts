@@ -82,13 +82,13 @@ class MemoryKV implements KVClient {
 async function createRealKV(): Promise<KVClient> {
   const { kv } = await import('@vercel/kv');
   return {
-    get: (key: string) => kv.get(key),
-    set: (key: string, value: any) => kv.set(key, value),
+    get: (key: string) => kv.get(key) as Promise<any>,
+    set: (key: string, value: any) => kv.set(key, value) as Promise<void>,
     del: (key: string) => {
       kv.del(key);
       return Promise.resolve();
     },
-    ping: () => kv.ping()
+    ping: () => kv.ping() as Promise<string>
   };
 }
 
